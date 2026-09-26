@@ -2,6 +2,8 @@ param([string]$PackageDirectory = (Split-Path $PSScriptRoot))
 . "$PSScriptRoot/validation-common.ps1"
 $PackageDirectory = (Resolve-Path -LiteralPath $PackageDirectory).Path
 $manifestHash = Assert-PackageHashes $PackageDirectory
+& (Join-Path $PackageDirectory 'windows/verify-desktop.ps1')
+if (!$?) { throw 'Desktop manifest discovery verification failed.' }
 $python = Join-Path $PackageDirectory 'python/python.exe'
 & $python -B (Join-Path $PackageDirectory 'windows/verify-launcher.py') --package $PackageDirectory
 if ($LASTEXITCODE) { throw 'Windows launcher verification failed.' }
