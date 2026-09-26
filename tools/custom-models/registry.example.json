@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "default_model": "local-responses::example",
+  "providers": {
+    "local-responses": {
+      "name": "Local Responses API",
+      "api_format": "responses",
+      "base_url": "http://127.0.0.1:8000/v1"
+    },
+    "local-chat": {
+      "name": "Local Chat Completions API",
+      "api_format": "chat_completions",
+      "base_url": "http://127.0.0.1:8001/v1"
+    }
+  },
+  "models": [
+    {
+      "id": "example",
+      "provider": "local-responses",
+      "upstream_model": "example-model",
+      "display_name": "Local Responses example",
+      "context_window": 65536,
+      "max_output_tokens": 4096,
+      "auto_compact_token_limit": 60000,
+      "reasoning_efforts": ["medium"],
+      "default_reasoning_effort": "medium",
+      "supports_images": false
+    },
+    {
+      "id": "example",
+      "provider": "local-chat",
+      "upstream_model": "example-model",
+      "display_name": "Local Chat example",
+      "context_window": 65536,
+      "max_output_tokens": 4096,
+      "auto_compact_token_limit": 60000,
+      "reasoning_efforts": ["medium"],
+      "default_reasoning_effort": "medium",
+      "supports_images": false
+    }
+  ]
+}

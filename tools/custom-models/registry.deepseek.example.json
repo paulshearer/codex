@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "default_model": "deepseek::flash",
+  "providers": {
+    "deepseek": {
+      "name": "DeepSeek",
+      "api_format": "responses",
+      "base_url": "http://127.0.0.1:8002/v1",
+      "stream_idle_timeout_ms": 600000,
+      "upstream_timeout_seconds": 660
+    }
+  },
+  "models": [{
+    "id": "flash",
+    "provider": "deepseek",
+    "upstream_model": "/models/deepseek-v4-flash",
+    "display_name": "DeepSeek 4.1 Flash",
+    "context_window": 262144,
+    "max_output_tokens": 16384,
+    "auto_compact_token_limit": 196608,
+    "reasoning_efforts": ["medium"],
+    "default_reasoning_effort": "medium",
+    "supports_images": true
+  }]
+}
