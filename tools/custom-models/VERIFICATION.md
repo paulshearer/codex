@@ -9,6 +9,8 @@
 
 ## Completed checks
 
+The Windows release build completed successfully and all seven native binaries were produced. The built console reports `codex-cli 0.157.1`. Hidden launcher initialization/model listing passed against this baseline with Python 3.13.7 after fixing Windows stdin inheritance. Launcher fixtures additionally cover Unicode byte streams, EOF, and child exit while caller stdin remains open.
+
 On 2026-09-26, all 71 companion regression tests passed. They cover registry collisions, routing translation, overrides, callbacks, selection persistence, active-turn switching, streaming assembly, errors, authentication isolation, cancellation, handoff integrity, and command-aware CLI resume.
 
 The three acceptance scripts passed against the installed native CLI `0.158.0-alpha.2.1`:
@@ -21,7 +23,7 @@ The package validation gate repeats these acceptance checks against the bundled 
 
 ## External checks still pending
 
-The existing private DeepSeek service returned HTTP 503 on 2026-09-26: "DeepSeek V4.1 is loading or undergoing isolated testing. Please retry." Current live inference and desktop inference therefore remain unverified. The example preserves the previously verified model identifier and limits; it contains no private endpoint or credentials.
+The existing private DeepSeek service returned HTTP 503 on 2026-09-26: "DeepSeek V4.1 is loading or undergoing isolated testing. Please retry." A live smoke through the built 0.157.1 console returned exit 1 and preserved this provider error. Current successful live inference and desktop inference therefore remain unverified. The example preserves the previously verified model identifier and limits; it contains no private endpoint or credentials.
 
 Installed desktop version: `26.924.2738.0`. Automated checks exercise its native app-server protocol and fingerprint compatibility. Native desktop UI automation is unavailable in this session. Visual picker behavior, concurrent normal/custom windows, GUI restart, and a live DeepSeek GUI turn require the documented manual smoke checks. Protocol acceptance does not establish those visual results.
 

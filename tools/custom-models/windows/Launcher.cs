@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading;
 
 internal static class Launcher
 {
@@ -26,6 +27,32 @@ internal static class Launcher
         return String.IsNullOrEmpty(value) ? fallback : value;
     }
 
+    private static Thread Pump(Stream input, Stream output, bool closeOutput)
+    {
+        var thread = new Thread(delegate()
+        {
+            try
+            {
+                var buffer = new byte[8192];
+                int count;
+                while ((count = input.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    output.Write(buffer, 0, count);
+                    output.Flush();
+                }
+            }
+            catch (IOException) { }
+            catch (ObjectDisposedException) { }
+            finally
+            {
+                if (closeOutput) { try { output.Dispose(); } catch (IOException) { } }
+            }
+        });
+        thread.IsBackground = true;
+        thread.Start();
+        return thread;
+    }
+
     private static int Main(string[] args)
     {
         try
@@ -41,11 +68,28 @@ internal static class Launcher
             foreach (string argument in args) { command.Append(' ').Append(Quote(argument)); }
             var start = new ProcessStartInfo(python, command.ToString());
             start.UseShellExecute = false;
-            start.CreateNoWindow = Array.IndexOf(args, "app-server") >= 0;
+            bool appServer = Console.IsInputRedirected && Array.IndexOf(args, "app-server") >= 0;
+            start.CreateNoWindow = appServer;
+            start.RedirectStandardInput = appServer;
+            start.RedirectStandardOutput = appServer;
+            start.RedirectStandardError = appServer;
             start.WorkingDirectory = Environment.CurrentDirectory;
             start.EnvironmentVariables["PATH"] = Path.Combine(root, "native") + ";" + start.EnvironmentVariables["PATH"];
             using (Process process = Process.Start(start))
             {
+                if (appServer)
+                {
+                    // Keep stdin independent: a child may exit while its caller
+                    // still owns an open input pipe. Its background pump must
+                    // not delay exit propagation.
+                    Pump(Console.OpenStandardInput(), process.StandardInput.BaseStream, true);
+                    Thread output = Pump(process.StandardOutput.BaseStream, Console.OpenStandardOutput(), false);
+                    Thread errors = Pump(process.StandardError.BaseStream, Console.OpenStandardError(), false);
+                    process.WaitForExit();
+                    output.Join();
+                    errors.Join();
+                    return process.ExitCode;
+                }
                 process.WaitForExit();
                 return process.ExitCode;
             }

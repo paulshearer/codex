@@ -21,7 +21,7 @@ def main():
         module.mkdir(parents=True)
         (module / "__init__.py").write_text("", encoding="utf-8")
         (module / "__main__.py").write_text(
-            "import json,os,sys\nprint(json.dumps({'arguments':sys.argv[1:],'input':sys.stdin.read(),'path_head':os.environ['PATH'].split(os.pathsep)[0]},ensure_ascii=True))\nsys.exit(7)\n",
+            "import json,os,sys\nif '--exit-early' in sys.argv: print('early exit',flush=True); sys.exit(7)\nprint(json.dumps({'arguments':sys.argv[1:],'input':sys.stdin.read(),'path_head':os.environ['PATH'].split(os.pathsep)[0]},ensure_ascii=False))\nprint('stderr 日本',file=sys.stderr,flush=True)\nsys.exit(7)\n",
             encoding="utf-8",
         )
         registry = str(root / "registry with spaces.json")
@@ -41,36 +41,58 @@ def main():
             CUSTOM_CODEX_HOME=home,
             CUSTOM_CODEX_NATIVE=native,
         )
-        result = subprocess.run(
-            [str(root / "codex-custom.exe"), *arguments],
-            env=environment,
-            input="stdio preserved 日本\n",
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=30,
-        )
-        if result.returncode != 7:
-            raise RuntimeError(
-                "Exit propagation failed: " + repr((result.returncode, result.stderr))
+        for forwarded in (arguments, ["app-server", *arguments]):
+            result = subprocess.run(
+                [str(root / "codex-custom.exe"), *forwarded],
+                env=environment,
+                input="stdio preserved 日本\n",
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=30,
             )
-        actual = json.loads(result.stdout)
-        expected = {
-            "arguments": [
-                "--registry",
-                registry,
-                "--home",
-                home,
-                "--native",
-                native,
-                *arguments,
-            ],
-            "input": "stdio preserved 日本\n",
-            "path_head": str(root / "native"),
-        }
-        if actual != expected:
-            raise RuntimeError("Argument/stdio preservation failed: " + repr(actual))
-        print("Windows argument quoting, Unicode, stdio and exit propagation passed.")
+            if result.returncode != 7 or result.stderr != "stderr 日本\n":
+                raise RuntimeError(
+                    "Exit/stderr propagation failed: "
+                    + repr((result.returncode, result.stderr))
+                )
+            actual = json.loads(result.stdout)
+            expected = {
+                "arguments": [
+                    "--registry",
+                    registry,
+                    "--home",
+                    home,
+                    "--native",
+                    native,
+                    *forwarded,
+                ],
+                "input": "stdio preserved 日本\n",
+                "path_head": str(root / "native"),
+            }
+            if actual != expected:
+                raise RuntimeError(
+                    "Argument/stdio preservation failed: " + repr(actual)
+                )
+        process = subprocess.Popen(
+            [str(root / "codex-custom.exe"), "app-server", "--exit-early"],
+            env=environment,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            if process.wait(timeout=10) != 7:
+                raise RuntimeError(
+                    "Hidden child exit was not propagated while caller stdin remained open."
+                )
+        finally:
+            process.stdin.close()
+            process.stdout.close()
+            process.stderr.close()
+        print(
+            "Windows CLI/hidden app-server quoting, Unicode, stdin/stdout/stderr, EOF and early exit passed."
+        )
 
 
 if __name__ == "__main__":
