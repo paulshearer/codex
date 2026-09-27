@@ -32,6 +32,9 @@ internal static class DesktopLauncher
             foreach (string argument in args) { command.Append(' ').Append(Quote(argument)); }
             var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"), command.ToString());
             start.UseShellExecute = false;
+            // Windows PowerShell must discover its own inbox modules rather
+            // than inherit a PowerShell 7 caller's incompatible module paths.
+            start.EnvironmentVariables.Remove("PSModulePath");
             start.CreateNoWindow = true;
             start.RedirectStandardError = true;
             start.RedirectStandardOutput = true;

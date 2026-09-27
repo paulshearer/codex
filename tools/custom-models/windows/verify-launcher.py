@@ -93,6 +93,34 @@ def main():
         print(
             "Windows CLI/hidden app-server quoting, Unicode, stdin/stdout/stderr, EOF and early exit passed."
         )
+        shutil.copy2(package / "Codex-Custom-Desktop.exe", root)
+        windows = root / "windows"
+        windows.mkdir()
+        (windows / "launch-desktop.ps1").write_text(
+            "$hash = Get-Command Get-FileHash -ErrorAction SilentlyContinue\n"
+            "$appx = Get-Command Get-AppxPackage -ErrorAction SilentlyContinue\n"
+            "[IO.File]::WriteAllText([IO.Path]::Combine($PSScriptRoot, 'module-result.txt'), [string]([bool]$hash -and [bool]$appx))\n"
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        desktop_environment = dict(
+            environment, PSModulePath=str(root / "absent modules")
+        )
+        desktop = subprocess.run(
+            [str(root / "Codex-Custom-Desktop.exe")],
+            env=desktop_environment,
+            timeout=30,
+        )
+        if (
+            desktop.returncode != 0
+            or (windows / "module-result.txt").read_text() != "True"
+        ):
+            raise RuntimeError(
+                "Desktop child could not discover Windows PowerShell inbox modules."
+            )
+        print(
+            "Desktop PowerShell modules work with an incompatible inherited PSModulePath."
+        )
 
 
 if __name__ == "__main__":
