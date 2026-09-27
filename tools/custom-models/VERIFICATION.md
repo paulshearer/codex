@@ -47,3 +47,9 @@ An independent shutdown problem was reproduced: a helper inherited stdout after 
 R6 passed 73 regressions, Windows launcher/module isolation checks, native configuration/model discovery, native Responses and Chat acceptance, patch editing, callbacks, failures, cancellation, restart/resume, CLI provider switching, MCP discovery, automatic compaction/recall, and encrypted handoffs. The machine launcher now targets R6. The custom desktop restarted successfully (PID 330468) with its R6 shim; the normal desktop (PID 296568) remained running. Visual picker confirmation remains with the user.
 
 R6 ZIP SHA256: `e47143909e1a918d9d4015e8614bee9b12d5e258fbcece09089ffbfc1f12dc7a`. R5 is an instrumented diagnostic candidate and must not be distributed.
+
+## Visible desktop launch correction (2026-09-27)
+
+The desktop launcher incorrectly requested `WindowStyle Hidden` for the interactive app. A visible-window launch of the validated R6 runtime succeeded, and the user explicitly confirmed the window is visible. Both desktop shortcuts retain their module-isolated entrypoint; the private profile script now performs the R6 hash and desktop fingerprint checks before launching with `WindowStyle Normal`. Source launch-desktop.ps1 uses the same visible-window setting.
+
+R7 full validation reproduced an intermittent shutdown timeout despite identical R6 transport code. It remains an unreleased candidate. The installed runtime stays R6; only the private launcher window setting changed.

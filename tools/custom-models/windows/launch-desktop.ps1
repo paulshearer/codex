@@ -27,7 +27,7 @@ $settings = @{
 try {
     foreach ($entry in $settings.GetEnumerator()) { $saved[$entry.Key] = [Environment]::GetEnvironmentVariable($entry.Key, 'Process'); [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process') }
     $argument = '--user-data-dir="' + (Join-Path $ProfileDirectory 'chromium-data') + '"'
-    $process = Start-Process -FilePath $executable -ArgumentList $argument -PassThru -WindowStyle Hidden
+    $process = Start-Process -FilePath $executable -ArgumentList $argument -PassThru -WindowStyle Normal
     Write-Host "Launched isolated Codex desktop profile (PID $($process.Id)): $ProfileDirectory"
 } finally {
     foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
