@@ -28,3 +28,22 @@ The existing private DeepSeek service returned HTTP 503 on 2026-09-26: "DeepSeek
 Installed desktop version: `26.924.2738.0`. Its manifest names `app/ChatGPT.exe` as the desktop entry point; `app/Codex.exe` is a command stub. Launch and fingerprint discovery now use the manifest entry point, with containment, package identity, and executable hash checks. A direct startup smoke verified a separate custom desktop process, packaged shim/native child chain, and separate Chromium data while the normal desktop main process remained running. Automated checks exercise its native app-server protocol and fingerprint compatibility. Native desktop UI automation is unavailable in this session. Visual picker behavior, concurrent normal/custom windows, GUI restart, and a live DeepSeek GUI turn require the documented manual smoke checks. Protocol acceptance does not establish those visual results.
 
 No normal desktop profile authentication or databases are imported. No remote DeepSeek service changes are made.
+
+
+## 2026-09-27 launch follow-up
+
+DeepSeek returned HTTP 200. Live text inference and saved-task resume both exited 0 and recalled the expected token. A live file/tool exercise was cancelled after native execution-policy rejections; live editing remains unverified.
+
+An inherited PowerShell module path prevented the desktop wrapper from finding `Get-FileHash`. The desktop wrapper now removes only its child's `PSModulePath`; a regression with an invalid inherited module path passed. The machine's desktop shortcuts additionally use a process-local module-isolation wrapper around the validated R3 bundle, and actual launch exited 0 with an intentionally invalid parent module path.
+
+The R4 package candidate is not released: its native acceptance check twice exceeded the shutdown deadline after stdin closed. Its desktop launcher check and 71 regression tests passed. The source change does not modify native shutdown or transport behavior. Candidate diagnostics are retained locally in `out/package-validation-r4.log` and `out/package-validation-r4-retry.log`. The working desktop shortcuts continue to use R3.
+
+## Desktop picker correction (2026-09-27)
+
+The installed desktop applies its official-model allowlist when `config/read` does not report `model_catalog_json`, even when `model/list` returns visible custom entries. The companion now reports its generated catalog when no user catalog is configured. Native configuration fields and existing user catalog selections are preserved.
+
+An independent shutdown problem was reproduced: a helper inherited stdout after the native app-server exited, leaving its reader waiting indefinitely. Cleanup now bounds the reader wait after process exit. The regression covers an exited process with an open output queue.
+
+R6 passed 73 regressions, Windows launcher/module isolation checks, native configuration/model discovery, native Responses and Chat acceptance, patch editing, callbacks, failures, cancellation, restart/resume, CLI provider switching, MCP discovery, automatic compaction/recall, and encrypted handoffs. The machine launcher now targets R6. The custom desktop restarted successfully (PID 330468) with its R6 shim; the normal desktop (PID 296568) remained running. Visual picker confirmation remains with the user.
+
+R6 ZIP SHA256: `e47143909e1a918d9d4015e8614bee9b12d5e258fbcece09089ffbfc1f12dc7a`. R5 is an instrumented diagnostic candidate and must not be distributed.

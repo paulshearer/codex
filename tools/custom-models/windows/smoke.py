@@ -97,6 +97,12 @@ def main():
                 }
             )
             request({"method": "initialized", "params": {}})
+            configuration = request(
+                {"id": 3, "method": "config/read", "params": {"includeLayers": False}}
+            )
+            configured_catalog = configuration["config"].get("model_catalog_json")
+            if not configured_catalog or not Path(configured_catalog).is_file():
+                raise RuntimeError("Desktop custom catalog discovery is missing")
             catalog = request(
                 {"id": 2, "method": "model/list", "params": {"limit": 100}}
             )

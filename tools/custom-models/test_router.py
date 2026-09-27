@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import io
 from pathlib import Path
@@ -27,6 +28,10 @@ class FakeBackend:
 
     async def call(self, method, params):
         self.calls.append((method, copy.deepcopy(params)))
+        if method == "config/read":
+            return copy.deepcopy(
+                getattr(self.router, "native_config_result", {"config": {}})
+            )
         if method == "model/list":
             return {
                 "data": [{"id": "gpt", "model": "gpt", "isDefault": True}],
@@ -106,6 +111,35 @@ class FakeBackend:
 
 
 class RouterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_backend_close_finishes_when_exited_process_stdout_stays_open(self):
+        backend = Backend(self.router, "inherited-pipe")
+        backend.proc = SimpleNamespace(stdin=io.BytesIO(), wait=lambda: 0)
+        backend.reader = asyncio.create_task(backend.read())
+        backend.lines = asyncio.Queue()
+        await asyncio.wait_for(backend.close(), 4)
+        self.assertTrue(backend.proc.stdin.closed)
+        self.assertTrue(backend.reader.cancelled())
+
+    async def test_desktop_catalog_discovery_preserves_native_configuration(self):
+        original = {
+            "config": {"approval_policy": "on-request"},
+            "layers": [],
+            "origins": {},
+        }
+        self.router.native_config_result = copy.deepcopy(original)
+        result = await self.router.dispatch("config/read", {"includeLayers": True})
+        catalog = Path(result["config"].pop("model_catalog_json"))
+        self.assertTrue(catalog.is_file())
+        self.assertEqual(result, original)
+        self.assertEqual(self.router.native_config_result, original)
+        entries = await self.router.dispatch(
+            "model/list", {"includeHidden": True, "limit": 100}
+        )
+        self.assertIn("deepseek::flash", [entry["model"] for entry in entries["data"]])
+        original["config"]["model_catalog_json"] = "user-catalog.json"
+        self.router.native_config_result = original
+        self.assertEqual(await self.router.dispatch("config/read", {}), original)
+
     async def asyncSetUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

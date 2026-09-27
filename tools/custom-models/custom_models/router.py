@@ -181,7 +181,13 @@ class Backend:
                 self.proc.terminate()
                 await asyncio.wait_for(asyncio.to_thread(self.proc.wait), 10)
             if self.reader:
-                await self.reader
+                # A native helper can inherit stdout and keep the pipe open
+                # after the app-server process has exited. Its reader must not
+                # hold shutdown indefinitely once that process is gone.
+                try:
+                    await asyncio.wait_for(self.reader, 2)
+                except asyncio.TimeoutError:
+                    pass
 
 
 @dataclass
@@ -573,6 +579,16 @@ class Router:
             return await self.main.start()
         if self.main is None:
             raise RuntimeError("initialize must be called first")
+        if method == "config/read":
+            result = copy.deepcopy(await self.main.call(method, params))
+            config = result["config"]
+            # Desktop applies its OpenAI model allowlist when no configured
+            # catalog is reported, even to visible model/list entries.
+            if not config.get("model_catalog_json"):
+                config["model_catalog_json"] = self.overrides(self.registry.model())[
+                    "model_catalog_json"
+                ]
+            return result
         if method == "account/read":
             result = await self.main.call(method, params)
             if (
