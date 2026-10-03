@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import time
 
 
 def main():
@@ -90,6 +91,30 @@ def main():
             process.stdin.close()
             process.stdout.close()
             process.stderr.close()
+        (module / "__main__.py").write_text(
+            "import subprocess,sys\n"
+            "if '--inherited-pipes' in sys.argv:\n"
+            " subprocess.Popen([sys.executable,'-c','import time; time.sleep(8)'],"
+            " stdout=sys.stdout,stderr=sys.stderr,close_fds=False)\n"
+            " print('parent exited',flush=True);sys.exit(7)\n",
+            encoding="utf-8",
+        )
+        inherited = subprocess.Popen(
+            [str(root / "codex-custom.exe"), "app-server", "--inherited-pipes"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            inherited.stdin.close()
+            if inherited.wait(timeout=6) != 7:
+                raise RuntimeError("Inherited helper pipes delayed app-server exit")
+        finally:
+            inherited.stdout.close()
+            inherited.stderr.close()
+            # Let the deliberate inheritor release Windows file handles
+            # before TemporaryDirectory removes its executable.
+            time.sleep(8)
         print(
             "Windows CLI/hidden app-server quoting, Unicode, stdin/stdout/stderr, EOF and early exit passed."
         )

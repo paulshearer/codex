@@ -53,3 +53,9 @@ R6 ZIP SHA256: `e47143909e1a918d9d4015e8614bee9b12d5e258fbcece09089ffbfc1f12dc7a
 The desktop launcher incorrectly requested `WindowStyle Hidden` for the interactive app. A visible-window launch of the validated R6 runtime succeeded, and the user explicitly confirmed the window is visible. Both desktop shortcuts retain their module-isolated entrypoint; the private profile script now performs the R6 hash and desktop fingerprint checks before launching with `WindowStyle Normal`. Source launch-desktop.ps1 uses the same visible-window setting.
 
 R7 full validation reproduced an intermittent shutdown timeout despite identical R6 transport code. It remains an unreleased candidate. The installed runtime stays R6; only the private launcher window setting changed.
+
+## Desktop update recovery (2026-10-03)
+
+OpenAI Codex desktop updated from 26.924.2738.0 to 26.930.3930.0. The R6 desktop fingerprint correctly blocked launch. Revalidation initially hit an intermittent app-server shutdown hang because a descendant inherited the Windows shim's stdout/stderr pipes after Python exited. The shim now bounds its post-exit output-pump joins; the regression spawns a pipe-inheriting helper to exercise this case.
+
+R9 passed 73 companion tests, launcher regression, native Responses and Chat acceptance, actual patch, callbacks, cancellation, restart/resume, CLI, MCP discovery, automatic compaction/recall, and encrypted handoffs. It validated desktop 26.930.3930.0 and relaunched the isolated profile with the R9 shim. Normal desktop remained running. R9 ZIP SHA256: `25de3d6687d78743d79c2be51d88fad434bf86ead0d1d332942dd2dd7d3437`.

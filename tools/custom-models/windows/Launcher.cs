@@ -86,8 +86,11 @@ internal static class Launcher
                     Thread output = Pump(process.StandardOutput.BaseStream, Console.OpenStandardOutput(), false);
                     Thread errors = Pump(process.StandardError.BaseStream, Console.OpenStandardError(), false);
                     process.WaitForExit();
-                    output.Join();
-                    errors.Join();
+                    // A helper may inherit these pipes after the app-server
+                    // exits. Give buffered output time to drain, then return
+                    // the exited app-server's status.
+                    output.Join(2000);
+                    errors.Join(2000);
                     return process.ExitCode;
                 }
                 process.WaitForExit();
