@@ -75,7 +75,7 @@ async fn route_aware_pool_re_resolves_redirects_and_logs_only_final_outcome() {
 
     let logs = String::from_utf8(log_buffer.lock().expect("log buffer lock").clone())
         .expect("logs should be UTF-8");
-    assert!(logs.contains(&initial_url));
+    assert!(!logs.contains(&initial_url));
     assert_eq!(logs.matches("Request completed").count(), 1);
     assert!(!logs.contains("redirect-target-secret"));
 }

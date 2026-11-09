@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Codex Permissive Browser",
+  "version": "1.0.0",
+  "description": "Attach signed-in browser tabs to your standalone local agent.",
+  "permissions": [
+    "debugger",
+    "scripting",
+    "tabs",
+    "nativeMessaging",
+    "downloads",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Connect to Codex Permissive"
+  },
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2q4S8bSRCv1e7Z3z/ctbcD0VHQb/v23t3twSytjVDlUFlKFksy0tefQg98hfptOo9Il8wHKo1iYGtcQLI6UUTEPsXb3E60SCfYcV5bqNfvOQmMVsOhgqxq2xUWAsVnBkWMhDQQQUiEY8BYFE72Abh6O+n4KebengidxwEGxzDWCeJcxRsByq8F65mdxxiY6liai12P6gehUgZIJUe1/4mr/T7EabDMnGdKAI2fcMAYBR2NYM3+s/Cf/qGHcONN9IK5+wRK0s4yeAdvNEjLbxWfeRkVBeldPbyTwdKQfCuX+ceZLHQaMf/xIshdYVrEPbDKEYILkBDQ6Gge4ovLYa2wIDAQAB"
+}

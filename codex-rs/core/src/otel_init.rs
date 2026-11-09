@@ -19,6 +19,10 @@ pub fn build_provider(
     service_name_override: Option<&str>,
     default_analytics_enabled: bool,
 ) -> Result<Option<OtelProvider>, Box<dyn Error>> {
+    // A private build cannot acquire exporters from saved config or overrides.
+    if option_env!("CODEX_PERMISSIVE_BUILD") == Some("1") {
+        return Ok(None);
+    }
     let to_otel_exporter = |kind: &Kind| match kind {
         Kind::None => OtelExporter::None,
         Kind::Statsig => OtelExporter::Statsig,

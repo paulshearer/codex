@@ -10,6 +10,11 @@ internal static class DesktopAgentProtocolFixture {
         var json = new JavaScriptSerializer();
         var input = json.Deserialize<Dictionary<string, object>>(Console.In.ReadToEnd());
         string operation = Convert.ToString(input["operation"]);
+        if (operation == "action" && input.ContainsKey("finishUnknown")) {
+            Console.Error.WriteLine("{\"phase\":\"dispatching\",\"method\":\"fixture\"}");
+            Console.WriteLine("{\"ok\":false,\"outcome\":\"unknown\",\"error\":{\"code\":\"input_incomplete\"}}");
+            return 1;
+        }
         if (operation == "hang" || operation == "hang_after_dispatch" || operation == "action") {
             if (operation == "hang_after_dispatch" || operation == "action") {
                 Console.Error.WriteLine("{\"phase\":\"dispatching\",\"method\":\"fixture\"}");

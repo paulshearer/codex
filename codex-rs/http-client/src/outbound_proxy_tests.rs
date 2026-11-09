@@ -520,7 +520,7 @@ async fn route_aware_pool_logs_only_the_final_redirect_outcome() {
     let logs = String::from_utf8(log_buffer.lock().expect("log buffer lock").clone())
         .expect("logs should be UTF-8");
     assert!(logs.contains("log capture sentinel"));
-    assert!(logs.contains(&initial_url));
+    assert!(!logs.contains(&initial_url));
     assert_eq!(logs.matches("Request completed").count(), 1);
     for secret in ["redirect-target-secret-value", redirected_url, "location"] {
         assert!(

@@ -169,35 +169,32 @@ impl TransportClient {
         self.inner.execute(request).await
     }
 
-    pub(crate) fn log_response(&self, method: &Method, url: &str, response: &reqwest::Response) {
+    pub(crate) fn log_response(&self, method: &Method, _url: &str, response: &reqwest::Response) {
         if self.request_logging == RequestLogging::Enabled {
             tracing::debug!(
                 method = %method,
-                url = %url,
                 status = %response.status(),
-                headers = ?response.headers(),
                 version = ?response.version(),
                 "Request completed"
             );
         }
     }
 
-    pub(crate) fn log_error(&self, method: &Method, url: &str, error: &reqwest::Error) {
+    pub(crate) fn log_error(&self, method: &Method, _url: &str, error: &reqwest::Error) {
         if self.request_logging == RequestLogging::Enabled {
             tracing::debug!(
                 method = %method,
-                url = %url,
                 status = error.status().map(|status| status.as_u16()),
-                error = %error,
+                is_timeout = error.is_timeout(),
+                is_connect = error.is_connect(),
                 "Request failed"
             );
         }
     }
-    pub(crate) fn log_error_summary(&self, method: &Method, url: &str, error: &reqwest::Error) {
+    pub(crate) fn log_error_summary(&self, method: &Method, _url: &str, error: &reqwest::Error) {
         if self.request_logging == RequestLogging::Enabled {
             tracing::debug!(
                 method = %method,
-                url = %url,
                 status = error.status().map(|status| status.as_u16()),
                 is_timeout = error.is_timeout(),
                 is_connect = error.is_connect(),

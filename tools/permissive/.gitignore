@@ -1,0 +1,8 @@
+__pycache__/
+node_modules/
+dist/
+out/
+.venv/
+desktop/renderer.js
+desktop-rs/target/
+desktop-rs/gen/

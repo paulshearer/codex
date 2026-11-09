@@ -1,0 +1,4 @@
+interface:
+  display_name: "Edge Bitwarden Access"
+  short_description: "Use Edge Work profile with AI Bitwarden CLI"
+  default_prompt: "Use $edge-bitwarden-access to open Edge, retrieve a site credential from the AI Bitwarden vault, and complete login safely."

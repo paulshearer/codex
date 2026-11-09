@@ -142,6 +142,18 @@ def cleanup_payload(payload):
     return {'operation': 'cleanup_input', 'keys': keys, 'buttons': buttons}
 
 
+def release_uncertain_input(result, payload, executable):
+    release = cleanup_payload(payload) if result.get('outcome') == 'unknown' else None
+    if release:
+        # Input-state cleanup is reported separately and never repeats the
+        # requested operation, even after partial native output or SendInput.
+        try:
+            result['inputCleanup'] = run_helper(release, 3, executable)
+        except Exception as error:
+            result['inputCleanup'] = {'ok': False, 'error': {'code': 'cleanup_failed', 'message': str(error)}}
+    return result
+
+
 def run_helper(payload, timeout, executable=None):
     executable = Path(executable) if executable else helper_path()
     if not executable.is_file():
@@ -167,25 +179,18 @@ def run_helper(payload, timeout, executable=None):
             result = {'ok': False, 'error': {'code': 'helper_timeout',
                     'message': 'The native desktop operation exceeded its deadline; only its owned helper was stopped.'},
                     'outcome': outcome, 'retrySafe': outcome == 'not_started'}
-            release = cleanup_payload(payload) if dispatching else None
-            if release:
-                # This is input-state cleanup, never a replay of the operation.
-                # It runs in another owned disposable helper and is reported.
-                try:
-                    result['inputCleanup'] = run_helper(release, 3, executable)
-                except Exception as error:
-                    result['inputCleanup'] = {'ok': False, 'error': {'code': 'cleanup_failed', 'message': str(error)}}
-            return result
+            return release_uncertain_input(result, payload, executable)
         try:
             result = json.loads(stdout.decode('utf-8-sig'))
         except (ValueError, UnicodeError):
             dispatching = b'"phase":"dispatching"' in stderr
-            return {'ok': False, 'error': {'code': 'helper_protocol_error',
+            result = {'ok': False, 'error': {'code': 'helper_protocol_error',
                     'message': 'The native helper did not return a complete JSON result.'},
                     'outcome': 'unknown' if dispatching else 'not_started', 'retrySafe': not dispatching}
+            return release_uncertain_input(result, payload, executable)
         if not isinstance(result, dict) or not isinstance(result.get('ok'), bool):
             raise DesktopError('helper_protocol_error', 'Invalid native desktop result.', 'unknown')
-        return result
+        return release_uncertain_input(result, payload, executable)
     finally:
         if tree:
             tree.close()

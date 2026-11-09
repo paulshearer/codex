@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-watch"
+description = "Enables the desktop_watch command without any pre-configured scope."
+commands.allow = ["desktop_watch"]
+
+[[permission]]
+identifier = "deny-desktop-watch"
+description = "Denies the desktop_watch command without any pre-configured scope."
+commands.deny = ["desktop_watch"]

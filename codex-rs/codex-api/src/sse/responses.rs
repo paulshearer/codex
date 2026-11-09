@@ -24,7 +24,6 @@ use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
-use tokio::time::timeout;
 use tracing::debug;
 use tracing::trace;
 
@@ -531,13 +530,14 @@ async fn process_sse_with_treatment(
     let mut stream = stream.eventsource();
     let mut response_error: Option<ApiError> = None;
     let mut last_server_model: Option<String> = None;
+    let idle_deadline = super::idle_deadline::IdleDeadline::from(idle_timeout);
 
     loop {
         let start = Instant::now();
         let response = tokio::select! {
             biased;
             _ = tx_event.closed() => return,
-            response = timeout(idle_timeout, stream.next()) => response,
+            response = idle_deadline.wait(stream.next()) => response,
         };
         if let Some(t) = telemetry.as_ref() {
             t.on_sse_poll(&response, start.elapsed());
@@ -570,7 +570,7 @@ async fn process_sse_with_treatment(
             }
         };
 
-        trace!("SSE event: {}", &sse.data);
+        trace!(payload_bytes = sse.data.len(), "SSE event received");
 
         let event: ResponsesStreamEvent = match serde_json::from_str(&sse.data) {
             Ok(event) => event,

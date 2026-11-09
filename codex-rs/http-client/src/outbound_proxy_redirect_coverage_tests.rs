@@ -318,7 +318,7 @@ async fn route_aware_pool_sanitizes_redirected_failure_logs() {
         .expect("logs should be UTF-8");
     assert!(logs.contains("log capture sentinel"));
     assert!(
-        logs.contains(&enabled_initial_url),
+        !logs.contains(&enabled_initial_url),
         "captured logs:\n{logs}"
     );
     assert!(!logs.contains(&disabled_initial_url));

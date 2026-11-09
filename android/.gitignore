@@ -1,0 +1,12 @@
+.gradle/
+.kotlin/
+local.properties
+**/build/
+out/
+*.apk
+*.aab
+*.p12
+*.jks
+*.keystore
+*.dpapi
+*signing*.properties

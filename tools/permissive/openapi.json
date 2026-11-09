@@ -1,0 +1,2378 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Codex Permissive Delegation API",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8789"
+    }
+  ],
+  "security": [
+    {
+      "requestSignature": [],
+      "signatureInput": [],
+      "contentDigest": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "requestSignature": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Signature",
+        "description": "Required Ed25519 HTTP Message Signatures (RFC 9421); see API_AUTH.md for the strict signing profile."
+      },
+      "signatureInput": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Signature-Input",
+        "description": "Required Ed25519 HTTP Message Signatures (RFC 9421); see API_AUTH.md for the strict signing profile."
+      },
+      "contentDigest": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Content-Digest",
+        "description": "Required Ed25519 HTTP Message Signatures (RFC 9421); see API_AUTH.md for the strict signing profile."
+      }
+    },
+    "schemas": {
+      "ChatHistoryPoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["taskId", "messageId", "submissionId"],
+        "properties": {
+          "taskId": {"type": "string", "description": "Task containing the selected message."},
+          "segmentId": {"type": "string", "description": "Stable chat UUID followed by -N. Defaults to the latest segment. History operations read only this segment and its checkpoint."},
+          "messageId": {"type": "string", "description": "prompt, result for a legacy fallback, or the string ID of the message's first native or steering event."},
+          "submissionId": {"type": "string", "format": "uuid", "description": "Reuse this ID when retrying an uncertain operation."}
+        }
+      },
+      "Submission": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "workspaceId"
+            ]
+          },
+          {
+            "required": [
+              "workingDirectory"
+            ]
+          }
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "workingDirectory": {
+            "type": "string",
+            "description": "Absolute directory inside the Windows guest. The controller creates it through PowerShell Direct; host directories are never mounted."
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace owning the chat. When omitted, an existing workspace for workingDirectory is used or created."
+          },
+          "browserMode": {
+            "type": "string",
+            "enum": [
+              "dedicated",
+              "attached"
+            ]
+          },
+          "resumeTaskId": {
+            "type": "string"
+          },
+          "browser": {
+            "type": "string",
+            "enum": [
+              "chromium",
+              "chrome",
+              "msedge"
+            ],
+            "default": "chromium"
+          },
+          "browserProfile": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^([A-Za-z0-9][A-Za-z0-9_-]{0,63})?$",
+            "default": "",
+            "description": "Named dedicated profile, or persistent extension profile ID in attached mode. Empty uses the default profile behavior."
+          },
+          "skills": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "string"
+            },
+            "description": "Explicit chat skill selection. Replaces workspace skills; empty disables them for this chat."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "default",
+              "plan",
+              "goal"
+            ],
+            "default": "default"
+          },
+          "goal": {
+            "type": "string",
+            "description": "Goal objective of at most 8 KiB. In Goal mode, empty uses the current message as the objective."
+          },
+          "submissionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Stable UUID for retry deduplication; reuse with the same request."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 10,
+            "uniqueItems": true,
+            "description": "Uploaded attachment IDs. Up to 32 MiB total; images are native vision input and other files are readable managed copies. Omitted attachments are not inherited on continuation."
+          }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "pausing",
+              "paused",
+              "cancelling",
+              "completed",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ]
+          },
+          "workspaceId": {
+            "type": "string"
+          },
+          "workspaceRevision": {
+            "type": "integer"
+          },
+          "threadId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "result": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "canRetry": {
+            "type": "boolean",
+            "description": "The failed task has a saved native conversation and a recognized premature Responses stream failure. Retry the latest task using its retry endpoint."
+          },
+          "request": {
+            "$ref": "#/components/schemas/Submission"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          },
+          "completedAt": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Persisted terminal timestamp in Unix seconds; null while active."
+          },
+          "tokenUsage": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Native reported counters for this task, excluding earlier conversation turns. Null when unavailable.",
+            "properties": {
+              "cachedInputTokens": {
+                "type": "integer"
+              },
+              "inputTokens": {
+                "type": "integer"
+              },
+              "outputTokens": {
+                "type": "integer"
+              },
+              "reasoningOutputTokens": {
+                "type": "integer"
+              },
+              "totalTokens": {
+                "type": "integer"
+              }
+            }
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "goal": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Latest native goal status, objective, token usage and elapsed time for this task."
+          },
+          "conversationId": {
+            "type": "string",
+            "description": "Stable root task ID shared by all successors."
+          },
+          "activeTurnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "diagnosticLogLevel": {
+            "enum": [
+              "off",
+              "errors",
+              "info",
+              "debug"
+            ]
+          },
+          "execution": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Host-owned execution receipt. Task IDs remain stable across guest recovery and movement.",
+            "properties": {
+              "location": {
+                "const": "hyperv"
+              },
+              "environmentId": {
+                "type": "string"
+              },
+              "vmId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "attemptId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "phase": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "WorkspaceSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "workingDirectory": {
+            "type": "string",
+            "description": "Absolute Windows guest working directory in controller deployments."
+          },
+          "systemPrompt": {
+            "type": "string",
+            "default": ""
+          },
+          "skills": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "string",
+              "description": "Absolute SKILL.md file path"
+            }
+          },
+          "browserMode": {
+            "enum": [
+              "dedicated",
+              "attached"
+            ]
+          },
+          "browser": {
+            "type": "string",
+            "enum": [
+              "chromium",
+              "chrome",
+              "msedge"
+            ],
+            "default": "chromium"
+          },
+          "browserProfile": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^([A-Za-z0-9][A-Za-z0-9_-]{0,63})?$",
+            "default": "",
+            "description": "Named dedicated profile, or persistent extension profile ID in attached mode. Empty uses the default profile behavior."
+          },
+          "executionDetail": {
+            "enum": [
+              "minimal",
+              "standard",
+              "full"
+            ],
+            "default": "standard"
+          },
+          "diagnosticLogLevel": {
+            "enum": [
+              "off",
+              "errors",
+              "info",
+              "debug"
+            ],
+            "default": "off",
+            "description": "Captured per task. Debug includes local chat, workspace context, and tool content."
+          }
+        }
+      },
+      "Workspace": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/WorkspaceSettings"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer"
+              },
+              "taskCount": {
+                "type": "integer"
+              },
+              "createdAt": {
+                "type": "integer"
+              },
+              "updatedAt": {
+                "type": "integer"
+              }
+            }
+          }
+        ]
+      },
+      "Continuation": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "browserMode": {
+            "type": "string",
+            "enum": [
+              "dedicated",
+              "attached"
+            ]
+          },
+          "browser": {
+            "type": "string",
+            "enum": [
+              "chromium",
+              "chrome",
+              "msedge"
+            ],
+            "default": "chromium"
+          },
+          "browserProfile": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^([A-Za-z0-9][A-Za-z0-9_-]{0,63})?$",
+            "default": "",
+            "description": "Named dedicated profile, or persistent extension profile ID in attached mode. Empty uses the default profile behavior."
+          },
+          "skills": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "string"
+            },
+            "description": "Explicit chat skill selection. Replaces workspace skills; empty disables them for this chat."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "default",
+              "plan",
+              "goal"
+            ],
+            "default": "default"
+          },
+          "goal": {
+            "type": "string",
+            "description": "Goal objective of at most 8 KiB. In Goal mode, empty uses the current message as the objective."
+          },
+          "submissionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Stable UUID for retry deduplication; reuse with the same request."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 10,
+            "uniqueItems": true,
+            "description": "Uploaded attachment IDs. Up to 32 MiB total; images are native vision input and other files are readable managed copies. Omitted attachments are not inherited on continuation."
+          }
+        }
+      },
+      "Steering": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "prompt",
+          "expectedTurnId",
+          "submissionId"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedTurnId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "submissionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Stable UUID for retry deduplication; reuse with the same request."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 10,
+            "uniqueItems": true,
+            "description": "Uploaded attachment IDs. Up to 32 MiB total; images are native vision input and other files are readable managed copies. Omitted attachments are not inherited on continuation."
+          }
+        }
+      },
+      "Followup": {
+        "type": "object",
+        "required": [
+          "prompt",
+          "submissionId"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "browserMode": {
+            "type": "string",
+            "enum": [
+              "dedicated",
+              "attached"
+            ]
+          },
+          "browser": {
+            "type": "string",
+            "enum": [
+              "chromium",
+              "chrome",
+              "msedge"
+            ],
+            "default": "chromium"
+          },
+          "browserProfile": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^([A-Za-z0-9][A-Za-z0-9_-]{0,63})?$",
+            "default": "",
+            "description": "Named dedicated profile, or persistent extension profile ID in attached mode. Empty uses the default profile behavior."
+          },
+          "skills": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "string"
+            },
+            "description": "Explicit chat skill selection. Replaces workspace skills; empty disables them for this chat."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "default",
+              "plan",
+              "goal"
+            ],
+            "default": "default"
+          },
+          "goal": {
+            "type": "string",
+            "description": "Goal objective of at most 8 KiB. In Goal mode, empty uses the current message as the objective."
+          },
+          "submissionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Stable UUID for retry deduplication; reuse with the same request."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 10,
+            "uniqueItems": true,
+            "description": "Uploaded attachment IDs. Up to 32 MiB total; images are native vision input and other files are readable managed copies. Omitted attachments are not inherited on continuation."
+          }
+        }
+      },
+      "Chat": {
+        "type": "object",
+        "properties": {
+          "chatGroupId": {"type":"string","description":"Stable logical chat identity shared by response branches; chat lists contain one entry per group."},
+          "branchPreparing": {"type":"boolean","description":"Durable branch finalization remains in progress. The model may already be responding."},
+          "versionsBusy": {"type":"boolean","description":"Generation or finalization in this chat group disables regeneration and version switching."},
+          "branchPreparationError": {"type":["string","null"],"description":"Last background preparation failure; retried automatically without rerunning generation."},
+          "replyVersions": {"type":"array","items":{"type":"object","properties":{
+            "groupId":{"type":"string"},"selectedVersionId":{"type":"string"},"taskId":{"type":"string"},
+            "messageId":{"type":["string","null"],"description":"Last assistant message for this prompt in the selected segment; null before a response exists."},
+            "versions":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"conversationId":{"type":"string"},"ordinal":{"type":"integer"}}}}
+          }}},
+          "cleanupPending": {
+            "type": "boolean",
+            "description": "The superseded source chat is queued for secure background erasure. The returned chat is ready to use."
+          },
+          "id": {
+            "type": "string"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            }
+          },
+          "followups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "description": "Stable UUID for retry deduplication; reuse with the same request."
+                },
+                "body": {
+                  "$ref": "#/components/schemas/Followup"
+                },
+                "status": {
+                  "const": "waiting"
+                },
+                "taskId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "createdAt": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "queueHeld": {
+            "type": "boolean"
+          },
+          "eventCursor": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string",
+            "description": "Custom chat title, or the original first message for chats that have not been renamed."
+          }
+        }
+      },
+      "SecureDelete": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "confirm",
+          "passes"
+        ],
+        "properties": {
+          "confirm": {
+            "type": "string",
+            "description": "Must equal the selected chat or workspace ID."
+          },
+          "passes": {
+            "type": "integer",
+            "const": 7
+          }
+        }
+      },
+      "Attachment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "string",
+            "description": "Data URL for image previews; omitted for other files."
+          }
+        }
+      },
+      "Environment": {
+        "type": "object",
+        "description": "Controller-owned VM state. An exported source remains fenced. Guest disk rollback does not roll back external Internet effects.",
+        "properties": {
+          "environmentId": {
+            "type": "string"
+          },
+          "vmId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "generation": {
+            "type": "integer"
+          },
+          "phase": {
+            "type": "string"
+          }
+        }
+      },
+      "CredentialEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workspaceId",
+          "uploadId",
+          "wrappedKey",
+          "iv",
+          "ciphertext"
+        ],
+        "properties": {
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uploadId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "wrappedKey": {
+            "type": "string",
+            "contentEncoding": "base64"
+          },
+          "iv": {
+            "type": "string",
+            "contentEncoding": "base64"
+          },
+          "ciphertext": {
+            "type": "string",
+            "contentEncoding": "base64"
+          }
+        },
+        "description": "RSA-OAEP-SHA256/MGF1-SHA256 wraps a fresh AES-256-GCM key. AAD is UTF-8(uploadId + newline + workspaceId). Encrypted payload: label, origin, username, password, lifetime (session/hours), hours (1-168 when timed). Never submit plaintext fields."
+      },
+      "TemporaryCredential": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string",
+            "format": "uri",
+            "description": "Approved HTTPS origin. Related sign-in subdomains in the same PSL registrable domain and port are included; private tenants stay separate."
+          },
+          "site": {
+            "type": ["string", "null"],
+            "description": "Registered website matched using the ICANN and PRIVATE Public Suffix List; null means exact-origin scope."
+          },
+          "lifetime": {
+            "enum": [
+              "session",
+              "hours"
+            ]
+          },
+          "expiresAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "parameters": {
+      "taskId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "idempotency": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "Task": {
+        "description": "Durable task state",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Task"
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/v1/workspaces": {
+      "get": {
+        "summary": "List workspaces with settings and chat counts",
+        "responses": {
+          "200": {
+            "description": "data array of workspaces"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a workspace; name and workingDirectory are required",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Workspace"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/workspaces/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Read a workspace",
+        "responses": {
+          "200": {
+            "description": "Workspace settings"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update workspace defaults for future tasks and continuations",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated workspace"
+          }
+        }
+      }
+    },
+    "/v1/skills": {
+      "get": {
+        "summary": "Discover personal/project skill documents and workspace assignments",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workingDirectory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Available skill metadata: path, name, description and category"
+          }
+        }
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "summary": "Service health and task concurrency",
+        "responses": {
+          "200": {
+            "description": "Authenticated service health, execution role, model, concurrency, and bound VM identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "executionRole": {
+                      "enum": [
+                        "controller",
+                        "guest"
+                      ]
+                    },
+                    "maxConcurrentModelRequests": {
+                      "type": "integer"
+                    },
+                    "activeTasks": {
+                      "type": "integer"
+                    },
+                    "vmId": {
+                      "type": "string"
+                    },
+                    "environmentId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tasks": {
+      "post": {
+        "summary": "Submit work; immediately return a task ID",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Submission"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/Task"
+          },
+          "200": {
+            "$ref": "#/components/responses/Task"
+          }
+        }
+      },
+      "get": {
+        "summary": "List tasks newest first",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "data and nextCursor"
+          }
+        }
+      }
+    },
+    "/v1/tasks/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/taskId"
+        }
+      ],
+      "get": {
+        "summary": "Read status, result, and artifacts",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Task"
+          }
+        }
+      }
+    },
+    "/v1/tasks/{id}/events": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/taskId"
+        }
+      ],
+      "get": {
+        "summary": "Replayable SSE; disconnect does not cancel work",
+        "parameters": [
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event IDs, event kind, JSON data, and 15-second comments",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tasks/{id}/cancel": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/taskId"
+        }
+      ],
+      "post": {
+        "summary": "Cancel queued or running work",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Task"
+          }
+        }
+      }
+    },
+    "/v1/tasks/{id}/pause": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/taskId"
+        }
+      ],
+      "post": {
+        "summary": "Pause at the next activity boundary; queued tasks pause immediately",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Task"
+          },
+          "409": {
+            "description": "Task cannot be paused"
+          }
+        }
+      }
+    },
+    "/v1/tasks/{id}/resume": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/taskId"
+        }
+      ],
+      "post": {
+        "summary": "Resume a paused task without creating a new task ID",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Task"
+          },
+          "409": {
+            "description": "Task cannot be resumed"
+          }
+        }
+      }
+    },
+    "/v1/tasks/{id}/retry": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/taskId"
+        }
+      ],
+      "post": {
+        "summary": "Recover a failed response in the same task and saved native conversation",
+        "description": "Accepts no replacement prompt, attachments, or settings. Only the latest recoverable failed task can restart. Completed tool evidence is retained. Active duplicates return the existing task; held follow-up queues remain held.",
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/Task"
+          },
+          "200": {
+            "$ref": "#/components/responses/Task"
+          },
+          "409": {
+            "description": "Task cannot be retried, is not the latest conversation task, or its native conversation is busy"
+          }
+        }
+      }
+    },
+    "/v1/tasks/{id}/continue": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/taskId"
+        }
+      ],
+      "post": {
+        "summary": "Create a successor task in the saved native conversation",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Continuation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/Task"
+          }
+        }
+      }
+    },
+    "/v1/tasks/{id}/artifacts/{artifactId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/taskId"
+        },
+        {
+          "name": "artifactId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Download a task artifact",
+        "responses": {
+          "200": {
+            "description": "Artifact bytes"
+          }
+        }
+      }
+    },
+    "/v1/openapi.json": {
+      "get": {
+        "summary": "This API definition",
+        "responses": {
+          "200": {
+            "description": "OpenAPI document"
+          }
+        }
+      }
+    },
+    "/v1/skills/document": {
+      "get": {
+        "summary": "Read a skill document and category",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Skill path, name, description, category, and full content"
+          },
+          "400": {
+            "description": "Invalid skill path"
+          }
+        }
+      }
+    },
+    "/v1/skills/register": {
+      "post": {
+        "summary": "Register existing skill files in the library",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "paths": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 2048,
+                    "items": {
+                      "type": "string",
+                      "description": "Absolute SKILL.md path"
+                    }
+                  }
+                },
+                "required": [
+                  "paths"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Result"
+          },
+          "400": {
+            "description": "Invalid input or bundle"
+          }
+        }
+      }
+    },
+    "/v1/skills/categories": {
+      "patch": {
+        "summary": "Set the shared category for skill files",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "paths": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 2048,
+                    "items": {
+                      "type": "string",
+                      "description": "Absolute SKILL.md path"
+                    }
+                  },
+                  "category": {
+                    "type": "string",
+                    "maxLength": 120
+                  }
+                },
+                "required": [
+                  "paths",
+                  "category"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Result"
+          },
+          "400": {
+            "description": "Invalid input or bundle"
+          }
+        }
+      }
+    },
+    "/v1/skills/export": {
+      "post": {
+        "summary": "Export skills, supporting files and categories as a portable ZIP",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "paths": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 32,
+                    "items": {
+                      "type": "string",
+                      "description": "Absolute SKILL.md path"
+                    }
+                  }
+                },
+                "required": [
+                  "paths"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ZIP bundle, limited to 32 MiB and 2048 files",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input or bundle"
+          }
+        }
+      }
+    },
+    "/v1/skills/import": {
+      "post": {
+        "summary": "Import a skill bundle from an explicitly selected controller ZIP path",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Imported skill paths and categories"
+          },
+          "400": {
+            "description": "Invalid input or bundle"
+          }
+        }
+      }
+    },
+    "/v1/browsers": {
+      "get": {
+        "summary": "List supported browsers, managed profiles, installed local profiles and connected extension profiles",
+        "responses": {
+          "200": {
+            "description": "data array with browser id, name, installed, profiles and installedProfiles; installedProfiles includes id, name, account, directory, extensionInstalled and connected. connections includes connectionId, browser, profileId, localProfileId and profileName."
+          }
+        }
+      }
+    },
+    "/v1/browsers/connect": {
+      "post": {
+        "summary": "Open a discovered Chrome or Edge profile for extension setup and connection",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "browser",
+                  "profileId"
+                ],
+                "properties": {
+                  "browser": {
+                    "enum": [
+                      "chrome",
+                      "msedge"
+                    ]
+                  },
+                  "profileId": {
+                    "type": "string",
+                    "description": "Installed profile ID from GET /v1/browsers"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile ID, setupRequired and extensionDirectory"
+          },
+          "400": {
+            "description": "Invalid request or unavailable profile"
+          },
+          "401": {
+            "description": "Valid request signature required"
+          }
+        }
+      }
+    },
+    "/v1/browsers/setup": {
+      "post": {
+        "summary": "Enable Developer mode, load the extension and connect a discovered profile after confirmation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "browser",
+                  "profileId",
+                  "confirmed"
+                ],
+                "properties": {
+                  "browser": {
+                    "enum": [
+                      "chrome",
+                      "msedge"
+                    ]
+                  },
+                  "profileId": {
+                    "type": "string",
+                    "description": "Installed profile ID from GET /v1/browsers"
+                  },
+                  "confirmed": {
+                    "type": "boolean",
+                    "enum": [
+                      true
+                    ],
+                    "description": "Explicit approval of Developer mode, extension installation and browser control"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile ID, enabledDeveloperMode, extensionLoaded, paired and connected (all true)"
+          },
+          "400": {
+            "description": "Missing confirmation, unavailable profile or setup failure"
+          },
+          "401": {
+            "description": "Valid request signature required"
+          }
+        }
+      }
+    },
+    "/v1/chats": {
+      "get": {
+        "summary": "List conversations by latest activity; omit workspaceId for all workspaces",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "allOf": [
+                          {
+                            "$ref": "#/components/schemas/Task"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "title": {
+                                "type": "string"
+                              },
+                              "lastActivityAt": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "409": {
+            "description": "State conflict or unconfirmed steering delivery"
+          }
+        },
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ]
+      }
+    },
+    "/v1/chats/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Read ordered tasks, pending follow-ups and event snapshot cursor",
+        "description": "Loads only the latest numbered segment. The segment object gives id, number, latestId, previousId and after (initial replay cursor). Request previousId explicitly to prepend exactly one earlier segment.",
+        "parameters": [{"name":"segmentId","in":"query","required":false,"schema":{"type":"string"}}],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Chat"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "409": {
+            "description": "State conflict or unconfirmed steering delivery"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Rename a conversation without changing its tasks or activity ordering",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "title"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "description": "Trimmed single-line title; control characters and line separators are rejected."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved title",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "title"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid title or request body"
+          },
+          "401": {
+            "description": "Valid request signature required"
+          },
+          "404": {
+            "description": "Conversation not found"
+          }
+        }
+      }
+    },
+    "/v1/chats/{id}/events": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Replay conversation events across successor tasks",
+        "responses": {
+          "200": {
+            "description": "SSE by default. format=json returns up to 200 events after the cursor, bounded by optional through. Events include id, taskId, kind, data, createdAt.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "maxItems": 200,
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "409": {
+            "description": "State conflict or unconfirmed steering delivery"
+          }
+        },
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "json"
+              ]
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "through",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {"name":"segmentId","in":"query","required":false,"schema":{"type":"string"},"description":"Read events from this segment only; defaults to latest."},
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ]
+      }
+    },
+    "/v1/tasks/{id}/steer": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Steer a matching active native turn; never create a successor",
+        "responses": {
+          "200": {
+            "description": "Accepted native turnId; retries return the same result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "409": {
+            "description": "State conflict or unconfirmed steering delivery"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Steering"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chats/{id}/followups": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Enqueue a durable FIFO follow-up",
+        "responses": {
+          "202": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Chat"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "409": {
+            "description": "State conflict or unconfirmed steering delivery"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Followup"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chats/{id}/followups/{followupId}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "followupId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "delete": {
+        "summary": "Remove a waiting follow-up",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Chat"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "409": {
+            "description": "State conflict or unconfirmed steering delivery"
+          }
+        }
+      }
+    },
+    "/v1/chats/{id}/followups/resume": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Release a held queue and dispatch when the latest task is terminal",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Chat"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "409": {
+            "description": "State conflict or unconfirmed steering delivery"
+          }
+        }
+      }
+    },
+    "/v1/chats/{id}/edit-message": {
+      "post": {
+        "summary": "Edit a completed message while retaining later messages",
+        "description": "Finish active tasks first. Future turns restore revised context without rerunning earlier actions. Retry the same text and target with the same submissionId.",
+        "parameters": [{"name":"id","in":"path","required":true,"schema":{"type":"string","format":"uuid"}}],
+        "requestBody": {"required":true,"content":{"application/json":{"schema":{
+          "type":"object","additionalProperties":false,"required":["taskId","messageId","submissionId","text"],
+          "properties":{
+            "taskId":{"type":"string"},"messageId":{"type":"string"},"segmentId":{"type":"string"},
+            "submissionId":{"type":"string","format":"uuid"},
+            "text":{"type":"string","minLength":1,"description":"Nonblank UTF-8 text, at most 1 MiB"}
+          }
+        }}}},
+        "responses": {
+          "200":{"description":"Revised chat snapshot","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Chat"}}}},
+          "400":{"description":"Invalid edit or chat not finished"},
+          "409":{"description":"Running tasks or history maintenance; retry after completion"}
+        }
+      }
+    },
+    "/v1/chats/{id}/delete-message": {
+      "post": {
+        "summary":"Delete only one message, preserving later messages",
+        "description":"Requires a terminal source chat. Returns an independent replacement chat immediately, with a new chat ID and the original title. The source is hidden and durably queued for seven-pass cleanup in the background. The response message ID addresses the complete saved assistant reply. Does not undo external actions. Queued follow-ups are removed. Use the returned chat ID for subsequent requests; retry the same submissionId to retrieve the same replacement.",
+        "parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],
+        "requestBody":{"$ref":"#/paths/~1v1~1chats~1{id}~1delete-from/post/requestBody"},
+        "responses":{"200":{"description":"Revised chat snapshot","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Chat"}}}},"400":{"description":"Invalid point or confirmation"},"409":{"description":"Active work or pending cleanup; retry the same request"}}
+      }
+    },
+    "/v1/chats/{id}/regenerate": {
+      "post": {
+        "summary":"Regenerate a turn from its original prompt and attachments",
+        "description":"Requires a terminal source chat. Saves the selected prompt's context and a new response branch, dispatches generation, then finalizes retained transcript and artifact history in the background. The original response and its later conversation remain selectable in the same logical chat. Confirmation is optional for older clients. Commands may run again. Use the returned physical chat ID and reset event replay when changing versions. Retry with the same submissionId to retrieve the same generation; retries and restart recovery never implicitly reexecute it.",
+        "parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],
+        "requestBody":{"required":true,"content":{"application/json":{"schema":{"type":"object","additionalProperties":false,"required":["taskId","messageId","submissionId"],"properties":{
+          "taskId":{"type":"string"},"messageId":{"type":"string"},"segmentId":{"type":"string"},"submissionId":{"type":"string","format":"uuid"},"confirm":{"type":"string","description":"Optional; when supplied, must equal the chat ID."}
+        }}}}},
+        "responses":{"200":{"description":"Chat snapshot with generation queued or running","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Chat"}}}},"400":{"description":"Invalid point, missing original prompt, or invalid confirmation"},"409":{"description":"Active work or pending cleanup; retry the same request"}}
+      }
+    },
+    "/v1/chats/{id}/fork": {
+      "post": {
+        "summary": "Fork an independent chat through a completed message",
+        "description": "Copies the selected message and earlier messages, attachments and retained artifacts. Requires a terminal source chat. Future turns import retained messages and tool evidence into a fresh native thread; later model context is excluded. Returns the new chat snapshot. Does not undo or copy working directory changes.",
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChatHistoryPoint"}}}},
+        "responses": {
+          "200": {"description": "Independent fork", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Chat"}}}},
+          "400": {"description": "Invalid or incomplete point, or nonterminal source chat."},
+          "401": {"description": "Valid request signature required."},
+          "404": {"description": "Chat not found."},
+          "409": {"description": "History maintenance is in progress."}
+        }
+      }
+    },
+    "/v1/chats/{id}/delete-from": {
+      "post": {
+        "summary": "Delete a message and every later message in a replacement chat",
+        "description": "Requires a terminal selected chat. Clears queued follow-ups and returns an independent replacement with a new chat ID and the original title immediately. The source disappears from lists and is durably queued for seven-pass erasure in the background; cleanup failures and service restarts are retried automatically. Use the returned chat ID for subsequent requests and event replay. Working directory changes and external actions are not undone. Retry the same submissionId to retrieve the same replacement, including after source erasure.",
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {
+          "type": "object", "additionalProperties": false, "required": ["taskId", "messageId", "submissionId", "confirm"],
+          "properties": {
+            "taskId": {"type": "string"}, "messageId": {"type": "string"}, "segmentId": {"type":"string"},
+            "submissionId": {"type": "string", "format": "uuid"},
+            "confirm": {"type": "string", "description": "Must equal the chat ID in the path."}
+          }
+        }}}},
+        "responses": {
+          "200": {"description": "Retained chat snapshot", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Chat"}}}},
+          "400": {"description": "Invalid point or confirmation, or nonterminal source chat."},
+          "401": {"description": "Valid request signature required."},
+          "404": {"description": "Chat not found."},
+          "409": {"description": "Active task or unfinished cleanup. Retry the same request."}
+        }
+      }
+    },
+    "/v1/chats/{id}/secure-delete": {
+      "post": {
+        "summary": "Permanently remove saved app data with seven flushed file overwrite passes",
+        "description": "Requires an idle service and terminal chats. Shared databases and logs preserve other chats. Working directories, exports and browser profiles are excluded. Logical file overwrites cannot guarantee erasure of SSD remnants, caches, snapshots or backups. Retry the same operation after a partial failure.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SecureDelete"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Seven passes completed; returns deleted, passes, conversationIds, taskIds and threadIds."
+          },
+          "400": {
+            "description": "Invalid confirmation, pass count, or nonterminal chat."
+          },
+          "401": {
+            "description": "Valid request signature required."
+          },
+          "404": {
+            "description": "Selected chat or workspace not found."
+          },
+          "409": {
+            "description": "Active service task, busy storage or partial erase failure; retry the same request."
+          }
+        }
+      }
+    },
+    "/v1/workspaces/{id}/secure-delete": {
+      "post": {
+        "summary": "Permanently remove saved app data with seven flushed file overwrite passes",
+        "description": "Requires an idle service and terminal chats. Shared databases and logs preserve other chats. Working directories, exports and browser profiles are excluded. Logical file overwrites cannot guarantee erasure of SSD remnants, caches, snapshots or backups. Retry the same operation after a partial failure.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SecureDelete"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Seven passes completed; returns deleted, passes, conversationIds, taskIds and threadIds."
+          },
+          "400": {
+            "description": "Invalid confirmation, pass count, or nonterminal chat."
+          },
+          "401": {
+            "description": "Valid request signature required."
+          },
+          "404": {
+            "description": "Selected chat or workspace not found."
+          },
+          "409": {
+            "description": "Active service task, busy storage or partial erase failure; retry the same request."
+          }
+        }
+      }
+    },
+    "/v1/attachments": {
+      "post": {
+        "summary": "Upload an app-owned copy of an attachment (16 MiB per file)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "data",
+                  "workspaceId"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "data": {
+                    "type": "string",
+                    "contentEncoding": "base64"
+                  },
+                  "workspaceId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Saved attachment descriptor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Attachment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid attachment or size limit exceeded"
+          },
+          "413": {
+            "description": "Request is too large"
+          }
+        }
+      }
+    },
+    "/v1/attachments/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Read attachment metadata and image preview",
+        "responses": {
+          "200": {
+            "description": "Saved attachment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Attachment"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove an unsent attachment with seven overwrite passes",
+        "responses": {
+          "200": {
+            "description": "Removed"
+          },
+          "400": {
+            "description": "Attachment already belongs to a chat"
+          }
+        }
+      }
+    },
+    "/v1/attachments/{id}/content": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Download the exact attached file bytes",
+        "responses": {
+          "200": {
+            "description": "Attachment bytes"
+          }
+        }
+      }
+    },
+    "/v1/environment": {
+      "get": {
+        "summary": "Read controller VM state and Hyper-V status",
+        "responses": {
+          "200": {
+            "description": "VM binding and execution generation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Guest service has no host environment controls"
+          }
+        }
+      }
+    },
+    "/v1/environment/{action}": {
+      "post": {
+        "summary": "Control the external Hyper-V execution environment",
+        "description": "pause confirms a Hyper-V pause; resume continues it. reset increments the generation and restores the preceding checkpoint. export fences new work and pauses execution before the elevated cold-export helper runs. An exported source cannot resume. No model commands run on the controller.",
+        "parameters": [
+          {
+            "name": "action",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "pause",
+                "resume",
+                "reset",
+                "export"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Confirmed controller state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown action or guest service"
+          },
+          "409": {
+            "description": "Operation conflicts with the source export fence"
+          }
+        }
+      }
+    },
+    "/v1/credentials/prepare": {
+      "post": {
+        "summary": "Prepare a single-use, two-minute website credential handoff",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "workspaceId"
+                ],
+                "properties": {
+                  "workspaceId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success; Cache-Control: no-store"
+          },
+          "400": {
+            "description": "Invalid or expired handoff"
+          },
+          "401": {
+            "description": "Valid signed API-client request required"
+          }
+        }
+      }
+    },
+    "/v1/credentials": {
+      "post": {
+        "summary": "Accept a sealed temporary website credential",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialEnvelope"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success; Cache-Control: no-store"
+          },
+          "400": {
+            "description": "Invalid or expired handoff"
+          },
+          "401": {
+            "description": "Valid signed API-client request required"
+          }
+        }
+      },
+      "get": {
+        "summary": "List temporary credential metadata; never returns values",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; Cache-Control: no-store"
+          },
+          "400": {
+            "description": "Invalid or expired handoff"
+          },
+          "401": {
+            "description": "Valid signed API-client request required"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Revoke every credential and pending handoff in a workspace",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; Cache-Control: no-store"
+          },
+          "400": {
+            "description": "Invalid or expired handoff"
+          },
+          "401": {
+            "description": "Valid signed API-client request required"
+          }
+        }
+      }
+    },
+    "/v1/credentials/{id}": {
+      "delete": {
+        "summary": "Revoke one temporary credential",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "workspaceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; Cache-Control: no-store"
+          },
+          "400": {
+            "description": "Invalid or expired handoff"
+          },
+          "401": {
+            "description": "Valid signed API-client request required"
+          }
+        }
+      }
+    }
+  }
+}

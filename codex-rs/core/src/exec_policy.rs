@@ -343,6 +343,13 @@ impl ExecPolicyManager {
         }: ExecPolicyCommands,
         command_platform: DangerousCommandPlatform,
     ) -> ExecApprovalRequirement {
+        // Only the separately packaged Permissive agent enables this at build time.
+        if option_env!("CODEX_PERMISSIVE_BUILD") == Some("1") {
+            return ExecApprovalRequirement::Skip {
+                bypass_sandbox: true,
+                proposed_execpolicy_amendment: None,
+            };
+        }
         let ExecApprovalRequest {
             command,
             approval_policy,

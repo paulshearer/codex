@@ -1,81 +1,15 @@
-<p align="center"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer.
-<p align="center">
-  <img src="https://github.com/openai/codex/blob/main/.github/codex-cli-splash.png" alt="Codex CLI splash" width="80%" />
-</p>
-</br>
-If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="https://developers.openai.com/codex/ide">install in your IDE.</a>
-</br>If you want the desktop app experience, run <code>codex app</code> or visit <a href="https://chatgpt.com/codex?app-landing-page=true">the Codex App page</a>.
-</br>If you are looking for the <em>cloud-based agent</em> from OpenAI, <strong>Codex Web</strong>, go to <a href="https://chatgpt.com/codex">chatgpt.com/codex</a>.</p>
+# Codex Permissive
 
----
+An independent Windows desktop application, CLI, and authenticated task API. Inference uses the local DeepSeek V4.1 Flash instance on Sparky. New deployments run commands, desktop control, and browsers inside a dedicated Windows Hyper-V VM. The host keeps conversation history and controls the VM perimeter; the official Codex desktop is not required. Existing host installations remain supported through an explicit signed-service connection, as documented in the [release review](tools/permissive/RELEASE_REVIEW.md).
 
-## Quickstart
+The [native Android companion](android/README.md) uses a Sparky Chat themed interface to select Windows workspaces, share conversations and control tasks over Tailscale. Pair a phone through the Windows **Pair Android** panel; enrolled Android Keystore keys authenticate access.
 
-### Installing and running Codex CLI
+The native runtime is rebased onto upstream `rust-v0.162.1`, commit `092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`. The guest runs the separately compiled Permissive runtime as its local administrator, without harness action reviews. One task controls the shared guest desktop at a time. Host vSwitch rules isolate the guest from the host, LAN, and tailnet, with public Internet access and a fixed inference relay. A missing VM binding fails startup; execution never falls back to the host.
 
-Run the following on Mac or Linux to install Codex CLI:
+The VM uses a portable VHDX and cold Hyper-V export/import bundle, without BitLocker, Secure Boot, or vTPM dependencies. See [provisioning, isolation, recovery, and moving between hosts](tools/permissive/windows/sandbox/README.md). Elevated Hyper-V provisioning and live guest acceptance are required before deployment can be considered verified.
 
-```shell
-curl -fsSL https://chatgpt.com/codex/install.sh | sh
-```
+See [build, installation, browser setup, CLI, and API instructions](tools/permissive/README.md). The application and its OpenAPI specification live in `tools/permissive`; reusable provider compatibility code lives in `tools/custom-models`.
 
-Run the following on Windows to install Codex CLI:
+The [harness regression report](tools/permissive/HARNESS_REGRESSION.md) records the deployed tool fixes and matching padded/asymmetric attention tests.
 
-```shell
-powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
-```
-
-The standalone installers download from `https://releases.openai.com/codex` by default and fall back to GitHub Releases if a metadata or asset download is unavailable. To force GitHub Releases, set `CODEX_INSTALLER_USE_RELEASES_OPENAI_COM` to `false` (`0` and `no` are also accepted):
-
-```shell
-curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_INSTALLER_USE_RELEASES_OPENAI_COM=false sh
-```
-
-```powershell
-$env:CODEX_INSTALLER_USE_RELEASES_OPENAI_COM='false'; irm https://chatgpt.com/codex/install.ps1 | iex
-```
-
-Codex CLI can also be installed via the following package managers:
-
-```shell
-# Install using npm
-npm install -g @openai/codex
-```
-
-```shell
-# Install using Homebrew
-brew install --cask codex
-```
-
-Then simply run `codex` to get started.
-
-<details>
-<summary>You can also go to the <a href="https://github.com/openai/codex/releases/latest">latest GitHub Release</a> and download the appropriate binary for your platform.</summary>
-
-Each GitHub Release contains many executables, but in practice, you likely want one of these:
-
-- macOS
-  - Apple Silicon/arm64: `codex-aarch64-apple-darwin.tar.gz`
-  - x86_64 (older Mac hardware): `codex-x86_64-apple-darwin.tar.gz`
-- Linux
-  - x86_64: `codex-x86_64-unknown-linux-musl.tar.gz`
-  - arm64: `codex-aarch64-unknown-linux-musl.tar.gz`
-
-Each archive contains a single entry with the platform baked into the name (e.g., `codex-x86_64-unknown-linux-musl`), so you likely want to rename it to `codex` after extracting it.
-
-</details>
-
-### Using Codex with your ChatGPT plan
-
-Run `codex` and select **Sign in with ChatGPT**. We recommend signing into your ChatGPT account to use Codex as part of your Plus, Pro, Business, Edu, or Enterprise plan. [Learn more about what's included in your ChatGPT plan](https://help.openai.com/en/articles/11369540-codex-in-chatgpt).
-
-You can also use Codex with an API key, but this requires [additional setup](https://developers.openai.com/codex/auth#sign-in-with-an-api-key).
-
-## Docs
-
-- [**Codex Documentation**](https://developers.openai.com/codex)
-- [**Contributing**](./docs/contributing.md)
-- [**Installing & building**](./docs/install.md)
-- [**Open source fund**](./docs/open-source-fund.md)
-
-This repository is licensed under the [Apache-2.0 License](LICENSE).
+The original upstream README is preserved in [UPSTREAM_README.md](UPSTREAM_README.md). Upstream code retains its Apache 2.0 license and notices.

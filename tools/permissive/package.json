@@ -1,0 +1,25 @@
+{
+  "name": "codex-permissive",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "desktop": "powershell -NoProfile -ExecutionPolicy Bypass -File windows/build-desktop.ps1 -Debug -Run",
+    "pretest": "powershell -NoProfile -ExecutionPolicy Bypass -File windows/build-desktop.ps1 -Debug -E2E",
+    "build-ui": "node desktop/build.mjs",
+    "test": "node --test --test-concurrency=1 tests/privacy.test.mjs tests/mobile-pairing.test.mjs tests/browser.test.mjs tests/extension.test.mjs tests/credentials.test.mjs tests/credentials-desktop.test.mjs tests/conversation.test.mjs tests/desktop.test.mjs tests/progress-desktop.test.mjs tests/chats-desktop.test.mjs tests/history-desktop.test.mjs tests/attachments-desktop.test.mjs",
+    "install-browser": "playwright install chromium"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "fflate": "^0.8.3",
+    "playwright": "1.64.0",
+    "qrcode": "^1.5.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1"
+  }
+}

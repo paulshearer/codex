@@ -182,7 +182,7 @@ pub struct ModelProviderInfo {
     /// Number of times to retry reconnecting a dropped streaming response before failing.
     pub stream_max_retries: Option<u64>,
     /// Idle timeout (in milliseconds) to wait for activity on a streaming response before treating
-    /// the connection as lost.
+    /// the connection as lost. Zero explicitly disables the streaming idle deadline.
     pub stream_idle_timeout_ms: Option<u64>,
     /// Maximum time (in milliseconds) to wait for a websocket connection attempt before treating
     /// it as failed.

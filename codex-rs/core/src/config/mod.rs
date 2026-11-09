@@ -4513,8 +4513,13 @@ impl Config {
                 .and_then(|tui| tui.disable_paste_burst)
                 .or(cfg.disable_paste_burst)
                 .unwrap_or(false),
-            analytics_enabled: cfg.analytics.as_ref().and_then(|a| a.enabled),
-            feedback_enabled: cfg
+            analytics_enabled: if option_env!("CODEX_PERMISSIVE_BUILD") == Some("1") {
+                Some(false)
+            } else {
+                cfg.analytics.as_ref().and_then(|a| a.enabled)
+            },
+            feedback_enabled: option_env!("CODEX_PERMISSIVE_BUILD") != Some("1")
+                && cfg
                 .feedback
                 .as_ref()
                 .and_then(|feedback| feedback.enabled)

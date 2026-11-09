@@ -138,7 +138,7 @@ fn parse_user_message(message: &[ContentItem]) -> Option<UserMessageItem> {
                 });
             }
             ContentItem::OutputText { text } => {
-                warn!("Output text in user message: {}", text);
+                warn!(text_bytes = text.len(), "Output text in user message");
             }
         }
     }

@@ -1,0 +1,8 @@
+Permissive Codex Android
+Copyright 2026 Paul Shearer
+
+The Material 3 theme, chat layout and Tailscale startup design are adapted from
+Sparky Chat, Copyright 2026 Paul Shearer, licensed under Apache License 2.0.
+The Gradle wrapper is licensed under Apache License 2.0.
+Local QR scanning uses ZXing Android Embedded and ZXing Core (Apache License 2.0).
+See the repository LICENSE for the Apache License 2.0 text.

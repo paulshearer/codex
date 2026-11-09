@@ -151,23 +151,20 @@ impl ReqwestTransport {
         };
         if request_logging_enabled && enabled!(Level::TRACE) {
             trace!(
-                "{} to {}: {}",
-                req.method,
-                req.url,
-                request_body_for_trace(req)
+                method = %req.method,
+                body_bytes = ?request_body_size(req),
+                "HTTP request"
             );
         }
     }
 }
 
-fn request_body_for_trace(req: &Request) -> String {
+fn request_body_size(req: &Request) -> Option<usize> {
     match req.body.as_ref() {
-        Some(RequestBody::Json(body)) => body.to_string(),
-        Some(RequestBody::EncodedJson(body)) => {
-            String::from_utf8_lossy(body.trace_bytes()).into_owned()
-        }
-        Some(RequestBody::Raw(body)) => format!("<raw body: {} bytes>", body.len()),
-        None => String::new(),
+        Some(RequestBody::Json(body)) => Some(body.to_string().len()),
+        Some(RequestBody::EncodedJson(body)) => Some(body.trace_bytes().len()),
+        Some(RequestBody::Raw(body)) => Some(body.len()),
+        None => None,
     }
 }
 

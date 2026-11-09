@@ -2841,7 +2841,7 @@
           "type": "boolean"
         },
         "stream_idle_timeout_ms": {
-          "description": "Idle timeout (in milliseconds) to wait for activity on a streaming response before treating the connection as lost.",
+          "description": "Idle timeout (in milliseconds) to wait for activity on a streaming response before treating the connection as lost. Zero explicitly disables the streaming idle deadline.",
           "format": "uint64",
           "minimum": 0.0,
           "type": "integer"

@@ -1,5 +1,6 @@
 use super::*;
 use serde_json::json;
+use std::io::Read;
 use std::io::Write;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -8,12 +9,63 @@ use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 
 #[tokio::test]
-async fn enabled_request_logging_emits_transport_url_and_body() {
+async fn enabled_request_logging_emits_metadata_without_url_or_body() {
     let logs = capture_transport_logs(HttpClient::new(test_reqwest_client())).await;
 
     assert!(logs.contains("log capture sentinel"));
-    assert!(logs.contains("url-secret"));
-    assert!(logs.contains("body-secret"));
+    assert!(logs.contains("HTTP request"));
+    assert!(!logs.contains("url-secret"));
+    assert!(!logs.contains("body-secret"));
+}
+
+#[tokio::test]
+async fn completed_request_logging_omits_response_headers_and_content() {
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept request");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .expect("read timeout");
+        let mut incoming = [0; 4096];
+        stream.read(&mut incoming).expect("read request");
+        let body = b"PRIVATE-RESPONSE";
+        let headers = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nSet-Cookie: session=PRIVATE-COOKIE\r\nX-Request-Id: PRIVATE-HEADER\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        stream
+            .write_all(headers.as_bytes())
+            .expect("response headers");
+        stream.write_all(body).expect("response body");
+    });
+    let capture = Arc::new(Mutex::new(Vec::new()));
+    let writer = Arc::clone(&capture);
+    let subscriber = tracing_subscriber::registry().with(
+        tracing_subscriber::fmt::layer()
+            .with_writer(move || TestLogWriter(Arc::clone(&writer)))
+            .with_filter(
+                tracing_subscriber::filter::Targets::new()
+                    .with_target("codex_http_client", tracing::Level::TRACE),
+            ),
+    );
+    let _guard = tracing::subscriber::set_default(subscriber);
+    let transport = ReqwestTransport::from_http_client(HttpClient::new(test_reqwest_client()));
+    let mut request = Request::new(
+        Method::GET,
+        format!("http://{address}/responses?token=PRIVATE-QUERY"),
+    );
+    request.timeout = Some(Duration::from_secs(5));
+    let response = transport
+        .execute(request)
+        .await
+        .expect("successful request");
+    assert_eq!(response.body.as_ref(), b"PRIVATE-RESPONSE");
+    server.join().expect("server thread");
+    let logs =
+        String::from_utf8(capture.lock().expect("capture lock").clone()).expect("UTF-8 logs");
+    assert!(logs.contains("Request completed"));
+    assert!(!logs.contains("PRIVATE-"), "{logs}");
 }
 
 #[tokio::test]
@@ -34,11 +86,15 @@ async fn disabled_request_logging_suppresses_transport_url_and_body() {
     let client =
         crate::RouteAwareClientPool::new(factory, crate::ClientRouteClass::Api).into_client();
     let logs = capture_transport_logs(client.clone()).await;
-    assert!(logs.contains("url-secret"));
+    assert!(logs.contains("HTTP request"));
+    assert!(!logs.contains("url-secret"));
     let logs = capture_transport_logs(client.clone().without_request_logging()).await;
     assert!(!logs.contains("url-secret"), "{logs}");
     assert!(!logs.contains("body-secret"));
-    assert!(capture_transport_logs(client).await.contains("url-secret"));
+    let logs = capture_transport_logs(client).await;
+    assert!(logs.contains("HTTP request"));
+    assert!(!logs.contains("url-secret"));
+    assert!(!logs.contains("body-secret"));
 }
 
 #[tokio::test]

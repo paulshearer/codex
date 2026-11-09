@@ -71,6 +71,7 @@ coverage/
 
 # personal files
 personal/
+/.codex-remote-attachments/
 
 # os
 .DS_Store

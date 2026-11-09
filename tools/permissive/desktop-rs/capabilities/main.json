@@ -1,0 +1,9 @@
+{
+  "identifier": "main",
+  "description": "Local chat window with a fixed set of desktop operations.",
+  "windows": ["main"],
+  "permissions": [
+    "allow-desktop-call", "allow-desktop-watch", "allow-desktop-unwatch",
+    "core:event:allow-listen", "core:event:allow-unlisten"
+  ]
+}

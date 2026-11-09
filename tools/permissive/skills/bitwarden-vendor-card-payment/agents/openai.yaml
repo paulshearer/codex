@@ -1,0 +1,4 @@
+interface:
+  display_name: "Bitwarden Vendor Card Payment"
+  short_description: "Pay vendor invoices with Bitwarden cards"
+  default_prompt: "Use $bitwarden-vendor-card-payment to pay this vendor invoice using the card stored in Bitwarden."

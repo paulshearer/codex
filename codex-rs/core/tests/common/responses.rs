@@ -1132,14 +1132,21 @@ pub async fn mount_sse_once_match<M>(server: &MockServer, matcher: M, body: Stri
 where
     M: wiremock::Match + Send + Sync + 'static,
 {
-    let (mock, response_mock) = base_mock();
-    mock.and(matcher)
+    let response_mock = ResponseMock::new();
+    Mock::given(method("POST"))
+        .and(path_regex(".*/responses$"))
+        .and(matcher)
+        .and(response_mock.clone())
         .respond_with(sse_response(body))
         .up_to_n_times(1)
         .mount(server)
         .await;
     response_mock
 }
+
+#[cfg(test)]
+#[path = "responses_matcher_tests.rs"]
+mod matcher_tests;
 
 pub async fn mount_sse_once(server: &MockServer, body: String) -> ResponseMock {
     let (mock, response_mock) = base_mock();

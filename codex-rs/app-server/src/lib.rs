@@ -133,6 +133,7 @@ mod notification_media;
 mod otel_reloader;
 mod outgoing_message;
 mod plugin_config_reload;
+mod privacy;
 mod request_processors;
 mod request_serialization;
 mod server_request_error;
@@ -752,6 +753,9 @@ pub async fn run_main_with_transport_options(
         .with(feedback_metadata_layer)
         .with(log_db_layer)
         .with(otel_layers)
+        .with(privacy::diagnostic_filter(
+            option_env!("CODEX_PERMISSIVE_BUILD") == Some("1"),
+        ))
         .try_init();
     #[cfg(unix)]
     if let Some(Err(err)) = nofile_limit_result {

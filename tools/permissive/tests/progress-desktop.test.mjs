@@ -1,0 +1,143 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { unzipSync, strFromU8 } from 'fflate';
+import { launchDesktop } from './desktop-harness.mjs';
+
+test('native desktop shows live progress, freezes completion, reopens styled tables and exports Excel', async () => {
+  const root = process.cwd(), python = 'C:/codex-build/permissive-service-venv/Scripts/python.exe';
+  const home = mkdtempSync(path.join(tmpdir(), 'permissive-progress-ui-'));
+  const workbook = path.join(home, 'table.xlsx');
+  execFileSync(python, ['-m', 'permissive.auth', '--home', home, 'init-local', '--ensure'], { env: { ...process.env, PYTHONPATH: root }, stdio: 'ignore' });
+  const usage = { cachedInputTokens: 20, inputTokens: 100, outputTokens: 10, reasoningOutputTokens: 4, totalTokens: 110 };
+  const workspace = { id: 'w', name: 'Progress test', workingDirectory: root, browserMode: 'dedicated', browser: 'chromium', skills: [], taskCount: 1 };
+  const task = { id: 't', conversationId: 't', workspaceId: 'w', threadId: 'native-t', status: 'running', createdAt: Math.floor(Date.now() / 1000) - 10,
+    updatedAt: Math.floor(Date.now() / 1000), completedAt: null, tokenUsage: null, request: { prompt: 'Show a formatted table', workingDirectory: root, browserMode: 'dedicated' } };
+  const events = [], streams = new Set();
+  function emit(kind, data) {
+    const event = { id: events.length + 1, taskId: 't', kind, data, createdAt: Math.floor(Date.now() / 1000) };
+    events.push(event);
+    for (const stream of streams) stream.write(`id: ${event.id}\nevent: ${kind}\ndata: ${JSON.stringify(event)}\n\n`);
+  }
+  const server = createServer((request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    if (request.url === '/v1/health') return response.end('{"ok":true}');
+    if (request.url.startsWith('/v1/workspaces')) return response.end(JSON.stringify({ data: [workspace] }));
+    if (request.url === '/v1/tasks/t') return response.end(JSON.stringify(task));
+    if (request.url === '/v1/chats/t') return response.end(JSON.stringify({ id: 't', tasks: [task], followups: [], queueHeld: false, eventCursor: events.length }));
+    if (request.url.startsWith('/v1/chats/t/events?format=json')) {
+      const query = new URL(request.url, 'http://localhost').searchParams;
+      return response.end(JSON.stringify({ data: events.filter(event => event.id > Number(query.get('after')) && event.id <= Number(query.get('through'))) }));
+    }
+    if (request.url.startsWith('/v1/chats?')) return response.end(JSON.stringify({ data: [task], nextCursor: null }));
+    if (request.url.includes('/events')) {
+      response.setHeader('Content-Type', 'text/event-stream'); response.write(': connected\n\n');
+      for (const event of events) response.write(`id: ${event.id}\nevent: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`);
+      streams.add(response); response.on('close', () => streams.delete(response)); return;
+    }
+    if (request.url.startsWith('/v1/tasks')) return response.end(JSON.stringify({ data: [task], nextCursor: null }));
+    if (request.url.startsWith('/v1/skills')) return response.end('{"data":[]}');
+    if (request.url.startsWith('/v1/browsers')) return response.end('{"data":[],"connections":[]}');
+    response.end('{}');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  let app;
+  try {
+    app = await launchDesktop({ root, home, python, apiUrl: `http://127.0.0.1:${server.address().port}`, dialogs: { saveTable: workbook } });
+    const page = await app.firstWindow(), errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    const sidebar = page.getByRole('separator', { name: 'Resize sidebar', exact: true });
+    const workspacesSplitter = page.getByRole('separator', { name: 'Resize Workspaces and Chats' });
+    const width = await page.locator('aside').evaluate(element => element.getBoundingClientRect().width);
+    const box = await sidebar.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + 100); await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 70, box.y + 100); await page.mouse.up();
+    assert.equal(await page.locator('aside').evaluate(element => element.getBoundingClientRect().width), width + 70);
+    const height = await page.locator('.workspace-list').evaluate(element => element.getBoundingClientRect().height);
+    await workspacesSplitter.focus(); await page.keyboard.press('ArrowDown');
+    assert.equal(await page.locator('.workspace-list').evaluate(element => element.getBoundingClientRect().height), height + 10);
+    await page.reload(); await sidebar.waitFor();
+    assert.equal(await page.locator('aside').evaluate(element => element.getBoundingClientRect().width), width + 70);
+    await page.getByRole('button', { name: 'Securely delete chat Show a formatted table', exact: true }).click();
+    const deletion = page.getByRole('dialog', { name: 'Secure deletion' });
+    assert.equal(await deletion.getByRole('button', { name: 'Delete permanently · 7 passes', exact: true }).isEnabled(), true);
+    await deletion.getByRole('button', { name: 'Keep chat', exact: true }).click();
+    await page.locator('.task').click();
+    await page.locator('.live-progress').filter({ hasText: 'Thinking' }).waitFor();
+    emit('agent', { method: 'item/reasoning/textDelta', params: { itemId: 'r', delta: 'Inspecting the ' } });
+    await page.getByLabel('Live model thinking').filter({ hasText: 'Inspecting the ' }).waitFor();
+    emit('agent', { method: 'item/reasoning/textDelta', params: { itemId: 'r', delta: 'inventory as text arrives.' } });
+    await page.getByLabel('Live model thinking').filter({ hasText: 'Inspecting the inventory as text arrives.' }).waitFor();
+    emit('agent', { method: 'item/reasoning/summaryTextDelta', params: { itemId: 'r', delta: 'Checking the inventory.' } });
+    await page.locator('.live-progress').filter({ hasText: 'Checking the inventory.' }).waitFor();
+    assert.equal(await page.getByLabel('Live model thinking').innerText(), 'Inspecting the inventory as text arrives.');
+    await page.screenshot({ path: 'C:/codex-build/permissive-live-thinking.png' });
+    assert.match(await page.locator('.task-status').innerText(), /^Running \(~[\d.]+ TPS\)$/);
+    assert.equal(await page.locator('.task-status').evaluate(element => getComputedStyle(element).color), 'rgb(125, 181, 255)');
+    assert.equal(await page.locator('.live-progress').first().evaluate(element => getComputedStyle(element).color), 'rgb(196, 199, 204)');
+    emit('agent', { method: 'item/completed', params: { item: { id: 'r', type: 'reasoning', content: [], summary: ['Checked the inventory. Found all records.'] } } });
+    await page.locator('.thinking-summary > p').filter({ hasText: 'Checked the inventory.' }).waitFor();
+    assert.equal(await page.locator('.thinking-summary > p').innerText(), 'Checked the inventory.');
+    assert.equal(await page.getByLabel('Live model thinking').count(), 0);
+    emit('agent', { method: 'item/reasoning/textDelta', params: { itemId: 'verify', delta: 'Verifying totals as the next step.' } });
+    await page.getByLabel('Live model thinking').filter({ hasText: 'Verifying totals as the next step.' }).waitFor();
+    const text = '## Inventory\n\n| Name | Count |\n| :--- | ---: |\n| **Android** | 42 |\n| A\\|B | 001 |\n\n```text\n| This | is code |\n| --- | --- |\n```';
+    emit('agent', { method: 'item/completed', params: { item: { id: 'answer', type: 'agentMessage', phase: 'final_answer', text } } });
+    emit('usage', usage);
+    Object.assign(task, { status: 'completed', completedAt: task.createdAt + 12, updatedAt: task.createdAt + 12, tokenUsage: usage, result: text });
+    emit('status', { status: 'completed' });
+    await page.locator('.task-status').filter({ hasText: 'Done' }).waitFor();
+    assert.equal(await page.locator('.task-status').evaluate(element => getComputedStyle(element).color), 'rgb(117, 221, 161)');
+    assert.equal(await page.locator('.live-progress').count(), 0);
+    await page.getByRole('button', { name: 'Activity', exact: true }).click();
+    await page.locator('.thinking-summary').filter({ hasText: 'Checked the inventory.' }).waitFor();
+    assert.equal(await page.locator('.thinking-transcript').first().evaluate(element => element.open), false);
+    await page.getByText('View streamed thinking', { exact: true }).first().click();
+    assert.equal(await page.locator('.thinking-transcript pre').first().innerText(), 'Inspecting the inventory as text arrives.');
+    await page.getByText('View streamed thinking', { exact: true }).first().click();
+    await page.getByRole('dialog', { name: 'Activity', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
+    const frozen = await page.locator('.chat-status-row [role=status]').innerText();
+    await page.waitForTimeout(2200);
+    assert.equal(await page.locator('.chat-status-row [role=status]').innerText(), frozen);
+    assert.equal(await page.locator('.token-rate').count(), 0);
+    await page.getByRole('button', { name: 'Stats', exact: true }).click();
+    assert.deepEqual(JSON.parse(await page.locator('.token-usage pre').innerText()), usage);
+    await page.getByRole('dialog', { name: 'Stats', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
+    assert.equal(await page.locator('.table-popout-button').count(), 1);
+    await page.getByRole('button', { name: 'Open table: 2 rows × 2 columns' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Table', exact: true });
+    await dialog.waitFor();
+    assert.equal(await dialog.locator('tbody tr').count(), 2);
+    assert.equal(await dialog.locator('td strong').innerText(), 'Android');
+    assert.equal(await dialog.locator('tbody tr').nth(1).locator('td').first().innerText(), 'A|B');
+    assert.equal(await dialog.locator('th').last().evaluate(element => getComputedStyle(element).textAlign), 'right');
+    assert.equal(await dialog.locator('th').first().evaluate(element => getComputedStyle(element).position), 'sticky');
+    assert.equal(await dialog.locator('tbody tr').nth(1).locator('td').first().evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(250, 251, 248)');
+    await page.screenshot({ path: 'C:/codex-build/permissive-formatted-table.png' });
+    await dialog.getByRole('button', { name: 'Export as Excel' }).click();
+    await page.waitForTimeout(400);
+    const sheet = strFromU8(unzipSync(readFileSync(workbook))['xl/worksheets/sheet1.xml']);
+    assert.match(sheet, /Android/); assert.match(sheet, /001/);
+    await page.keyboard.press('Escape');
+    assert.equal(await dialog.count(), 0);
+    await page.locator('.task').click();
+    assert.equal(await page.locator('.chat-status-row [role=status]').innerText(), frozen);
+    await page.getByRole('button', { name: 'Activity', exact: true }).click();
+    assert.equal(await page.locator('.thinking-summary').count(), 2);
+    await page.getByRole('dialog', { name: 'Activity', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
+    await page.screenshot({ path: 'C:/codex-build/permissive-completed-telemetry.png' });
+    Object.assign(task, { status: 'failed', error: 'Example failure' }); emit('status', { status: 'failed' });
+    await page.locator('.task-status').filter({ hasText: 'Failed' }).waitFor();
+    assert.equal(await page.locator('.task-status').evaluate(element => getComputedStyle(element).color), 'rgb(255, 146, 146)');
+    assert.deepEqual(errors, []);
+  } finally {
+    if (app) await app.close();
+    for (const stream of streams) stream.end();
+    await new Promise(resolve => server.close(resolve));
+    rmSync(home, { recursive: true, force: true });
+  }
+});

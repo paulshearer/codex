@@ -26,6 +26,12 @@ path = "junit.xml"
 [profile.local]
 inherits = "default"
 
+[[profile.local.overrides]]
+# This fixture resizes five large images and can exceed a minute in Windows debug builds.
+platform = 'cfg(windows)'
+filter = 'package(codex-core) & test(=image_preparation::tests::detail_policies_apply_the_expected_budgets)'
+slow-timeout = { period = "1m", terminate-after = 3 }
+
 [test-groups.app_server_protocol_codegen]
 max-threads = 1
 

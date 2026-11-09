@@ -232,6 +232,11 @@ class NativeDeadlineTests(unittest.TestCase):
         self.assertTrue(result['inputCleanup']['ok'])
         self.assertEqual(result['inputCleanup']['method'], 'fixture')
 
+    def test_native_partial_input_error_also_releases_only_requested_inputs(self):
+        result = run_helper({'operation': 'action', 'action': 'click', 'button': 'right', 'finishUnknown': True}, 3, self.executable)
+        self.assertEqual(result['outcome'], 'unknown')
+        self.assertTrue(result['inputCleanup']['ok'])
+
     def test_stdio_mcp_discovery_and_call(self):
         environment = {**os.environ, 'PERMISSIVE_HOME': self.temporary.name, 'PERMISSIVE_TASK_ID': 'mcp-test',
                        'PERMISSIVE_DESKTOP_AGENT': str(self.executable)}
